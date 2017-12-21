@@ -48,19 +48,19 @@ public:
     for (int t = 0; t < N; t++) {
       fg[0] += 2 * CppAD::pow(vars[cte_start + t], 2);
       fg[0] += CppAD::pow(vars[epsi_start + t], 2);
-      fg[0] += 10*CppAD::pow(vars[v_start + t] - ref_v, 2);
+      fg[0] += 20 * CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Minimize the use of actuators.
     for (int t = 0; t < N - 1; t++) {
       fg[0] += CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += 10 * CppAD::pow(vars[a_start + t], 2);
+      fg[0] += 20 * CppAD::pow(vars[a_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
       fg[0] += 30000 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += 1000000 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     //
@@ -182,8 +182,8 @@ SolveResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // degrees (values in radians).
   // NOTE: Feel free to change this to something else.
   for (int i = delta_start; i < a_start; i++) {
-    vars_lowerbound[i] = -0.436332;
-    vars_upperbound[i] = 0.436332;
+    vars_lowerbound[i] = -deg2rad(MAX_ANGLE);
+    vars_upperbound[i] = deg2rad(MAX_ANGLE);
   }
 
   // Acceleration/decceleration upper and lower limits.
@@ -221,9 +221,10 @@ SolveResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // options
   std::string options;
+  options += "String sb yes\n";
   options += "Integer print_level  0\n";
   options += "Sparse  true        forward\n";
-  options += "Sparse  true        reverse\n";
+  // options += "Sparse  true        reverse\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
@@ -240,7 +241,7 @@ SolveResult MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
+  std::cerr << "Cost " << cost << std::endl;
   
   SolveResult ret;
   ret.delta = -solution.x[delta_start];

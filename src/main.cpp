@@ -13,11 +13,6 @@
 // for convenience
 using json = nlohmann::json;
 
-// For converting back and forth between radians and degrees.
-constexpr double pi() { return M_PI; }
-double deg2rad(double x) { return x * pi() / 180; }
-double rad2deg(double x) { return x * 180 / pi(); }
-
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -99,7 +94,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    // cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -121,7 +116,7 @@ int main() {
           // future state after latency seconds.
           const double latency = 0.1;
           v += throttle * latency;
-          psi -= v * steering_angle * deg2rad(25) / Lf * latency;
+          psi -= v * steering_angle * deg2rad(MAX_ANGLE) / Lf * latency;
           px += v * cos(psi) * latency;
           py += v * sin(psi) * latency;          
 
@@ -135,11 +130,9 @@ int main() {
           // Landmark points in car coordinates
           auto pts_c = mapToCarCoordinates(pts, px, py, psi);
 
-
           // Calculate polynomial coefficients of fitting curve of landmark
           // points in car coordinates. 
           Eigen::Vector4d coeffs = polyfit(pts_c.row(0), pts_c.row(1), 3);
-          std::cout << coeffs << '\n';
  
           // Car position and orientation in car coordinates ([0, 0], obviously)
           double px_c = 0;
@@ -162,14 +155,15 @@ int main() {
           state << px_c, py_c, psi_c, v, cte, epsi;
           SolveResult sr = mpc.Solve(state, coeffs);
 
-          double steer_value = sr.delta;
+          // NOTE: Remember to divide by deg2rad(MAX_ANGLE) before you send the
+          // steering value back. Otherwise the values will be in between
+          // [-deg2rad(MAX_ANGLE), deg2rad(MAX_ANGLE] instead of [-1, 1].
+          double steer_value = sr.delta / deg2rad(MAX_ANGLE);
           double throttle_value = sr.a;
 
           json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the
-          // steering value back. Otherwise the values will be in between
-          // [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value / deg2rad(25);
+  
+          msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
           // Display the MPC predicted trajectory
@@ -195,16 +189,13 @@ int main() {
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          // std::cout << msg << std::endl;
+
+          std::cout << steer_value << ", " << throttle_value << std::endl;
+          
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
-          //
-          // Feel free to play around with this value but should be to drive
-          // around the track with 100ms latency.
-          //
-          // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
-          // SUBMITTING.
           this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
@@ -231,18 +222,18 @@ int main() {
   });
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
-    std::cout << "Connected!!!" << std::endl;
+    std::cerr << "Connected!!!" << std::endl;
   });
 
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
     ws.close();
-    std::cout << "Disconnected" << std::endl;
+    std::cerr << "Disconnected" << std::endl;
   });
 
   int port = 4567;
   if (h.listen(port)) {
-    std::cout << "Listening to port " << port << std::endl;
+    std::cerr << "Listening to port " << port << std::endl;
   } else {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
